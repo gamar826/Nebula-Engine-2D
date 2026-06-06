@@ -92,10 +92,13 @@ const INITIAL_EDITOR_STATE = {
   expressionEditor: { isOpen: false, targetNodeId: null, targetField: null, expression: null }
 };
 
+const WELCOME_KEY = 'nebula_welcome_seen_v1';
+
 const loadSavedState = () => {
   try {
     const saved = localStorage.getItem('nebula_engine_state_v4');
-    if (saved) {
+    const welcomeSeen = localStorage.getItem(WELCOME_KEY);
+    if (saved && welcomeSeen === 'true') {
       const parsed = JSON.parse(saved);
       if (!parsed.project.assets) parsed.project.assets = [];
       if (!parsed.project.scripts) parsed.project.scripts = [];
@@ -118,7 +121,7 @@ const loadSavedState = () => {
       return { project: parsed.project, editor: { ...INITIAL_EDITOR_STATE, ...parsed.editor, isPlaying: false, expressionEditor: INITIAL_EDITOR_STATE.expressionEditor } };
     }
   } catch (e) { console.error("Failed to load state", e); }
-  return { project: INITIAL_PROJECT, editor: INITIAL_EDITOR_STATE };
+  return { project: INITIAL_PROJECT, editor: { ...INITIAL_EDITOR_STATE, activeScreen: 'WELCOME' } };
 };
 
 const EngineContext = createContext();
@@ -3292,6 +3295,46 @@ const AssetsScreen = () => {
   );
 };
 
+
+// ==========================================
+// --- WELCOME SCREEN ---
+// ==========================================
+
+const WelcomeScreen = ({ onEnter }) => {
+  return (
+    <div className="fixed inset-0 z-[99999] bg-gray-950 flex flex-col items-center justify-center select-none">
+      <div className="flex flex-col items-center gap-8 max-w-md w-full px-6">
+        {/* Logo */}
+        <div className="flex flex-col items-center gap-4">
+          <div className="p-5 bg-blue-600 rounded-2xl shadow-2xl shadow-blue-600/20">
+            <Code size={64} className="text-white" />
+          </div>
+          <h1 className="text-4xl font-bold text-white tracking-tight">Nebula Engine</h1>
+          <p className="text-sm text-gray-500 font-medium tracking-widest uppercase">Forge2D Game Editor</p>
+        </div>
+
+        {/* Message */}
+        <div className="text-center space-y-3">
+          <p className="text-gray-300 text-lg leading-relaxed">
+            To provide the best editing experience, please enter fullscreen mode.
+          </p>
+        </div>
+
+        {/* Enter Fullscreen Button */}
+        <button
+          onClick={onEnter}
+          className="w-full max-w-xs flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl text-lg font-semibold transition-all hover:scale-105 shadow-lg shadow-blue-600/25 active:scale-95"
+        >
+          <Maximize size={24} />
+          Enter Fullscreen
+        </button>
+
+        <p className="text-xs text-gray-600">You can exit fullscreen anytime by pressing Esc</p>
+      </div>
+    </div>
+  );
+};
+
 // ==========================================
 // --- PROJECT MANAGER SCREEN ---
 // ==========================================
@@ -3670,7 +3713,7 @@ const SceneEditorScreen = () => {
 
   return (
     <div className="flex flex-col h-full bg-gray-900 w-full overflow-hidden select-none">
-      <div className="h-14 bg-gray-950 border-b border-gray-800 flex items-center justify-between px-3 shrink-0" style={{ zIndex: 100 }}>
+      <div className="h-14 bg-gray-950 border-b border-gray-800 flex items-center justify-between px-3 shrink-0 overflow-x-auto" style={{ zIndex: 100 }}>
         <div className="flex items-center gap-2">
           <IconButton icon={Menu} tooltip="Project" onClick={() => dispatch({type: 'SET_SCREEN', payload: 'PROJECT_MANAGER'})} />
           <div className="h-5 w-px bg-gray-700"></div>
@@ -3714,8 +3757,30 @@ const SceneEditorScreen = () => {
 export default function App() {
   const [state, dispatch] = useReducer(engineReducer, null, loadSavedState);
 
+  // Enforce fullscreen on mount for returning users
+  useEffect(() => {
+    const welcomeSeen = localStorage.getItem(WELCOME_KEY);
+    if (welcomeSeen === 'true' && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }, []);
+
+  const handleWelcomeEnter = () => {
+    document.documentElement.requestFullscreen()
+      .then(() => {
+        localStorage.setItem(WELCOME_KEY, 'true');
+        dispatch({ type: 'SET_SCREEN', payload: 'PROJECT_MANAGER' });
+      })
+      .catch(() => {
+        // Even if fullscreen fails, proceed
+        localStorage.setItem(WELCOME_KEY, 'true');
+        dispatch({ type: 'SET_SCREEN', payload: 'PROJECT_MANAGER' });
+      });
+  };
+
   const renderScreen = () => {
     switch (state.editor.activeScreen) {
+      case 'WELCOME': return <WelcomeScreen onEnter={handleWelcomeEnter} />;
       case 'SCENE_EDITOR': return <SceneEditorScreen />;
       case 'SCRIPT_EDITOR': return <VisualScriptingScreen />;
       case 'ASSETS': return <AssetsScreen />;
